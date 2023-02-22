@@ -1,2 +1,3 @@
-# AIColor
-天池大数据比赛 CVPR AI着色
+# Algae_detect
+
+submit test
