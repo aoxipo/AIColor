@@ -20,9 +20,9 @@ else:
     device = torch.device("cpu")
 print("use gpu:", use_gpu)
 class Train():
-    def __init__(self, in_channles, out_channels, image_size = 128, method_type = 0, name = 'dense',is_show = True):
+    def __init__(self, in_channles, image_size = 224, name = 'dense', method_type = 0, is_show = True):
         self.in_channels = in_channles
-        self.out_channels = out_channels
+
         self.image_size = image_size
         self.name = name
         self.method_type = method_type
@@ -37,12 +37,12 @@ class Train():
 
         if(self.method_type == 0):
             from model.DesNet import densenet as Model
-            self.model = Model(in_channel=self.in_channels, num_classes=self.out_channels, num_queries = 25)
+            self.model = Model(in_channel=self.in_channels)
             print("build dense model")
         elif(self.method_type == 1):
             from model.MixFpn import MixFpn as Model
             # layers = [2,2,2,2], num_class = 2, num_require = 25
-            self.model = Model(in_channel=self.in_channels, layers = [2,2,2,2], num_classes=self.out_channels, num_queries = 25)
+            self.model = Model(in_channel=self.in_channels, layers = [2,2,2,2])
             print("build miffpn model")
         elif(self.method_type == 2):
             from model.SCSHNet import RESUNet
@@ -59,43 +59,38 @@ class Train():
         
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr = self.lr, betas=(0.5, 0.999))
     def train_and_test(self, n_epochs, data_loader_train, data_loader_test):
-        best_acc = 0.0
+        best_loss = 1000000
         es = 0
         for epoch in range(n_epochs):
             start_time =datetime.datetime.now()
             print("Epoch {}/{}".format(epoch, n_epochs))
             print("-" * 10)
-            epoch_train_acc, epoch_train_loss, coord_train_loss, class_train_loss = self.train(data_loader_train)
-            epoch_test_acc, epoch_test_loss, coord_test_loss, class_test_loss = self.test(data_loader_test)
+            epoch_train_loss = self.train(data_loader_train)
+            epoch_test_loss = self.test(data_loader_test)
 
-            self.history_acc.append(epoch_train_acc)
+            self.history_acc.append(0)
             self.history_loss.append(epoch_train_loss)
-            self.history_test_acc.append(epoch_test_acc)
+            self.history_test_acc.append(0)
             self.history_test_loss.append(epoch_test_loss)
             print(
-                "Loss is:{:.4f}, Train Accuracy is:{:.4f}%, Coord:{:.4f}, Class:{:.4f}\nLoss is:{:.4f}, Test Accuracy is:{:.4f}%, Coord:{:.4f}, Class:{:.4f}\ncost time:{:.4f} min, EAT:{:.4f}".format(
+                "Loss is:{:.4f}\nLoss is:{:.4f}\ncost time:{:.4f} min, EAT:{:.4f}".format(
                     epoch_train_loss,
-                    epoch_train_acc * 100,
-                    coord_train_loss, class_train_loss,
                     epoch_test_loss,
-                    epoch_test_acc * 100,
-                    coord_test_loss, class_test_loss,
                     (datetime.datetime.now() - start_time).seconds / 60,
                     (n_epochs - 1 - epoch) * (datetime.datetime.now() - start_time).seconds / 60,
                     )
             )
             if(epoch <= 4):
                 continue
-            if ((epoch_test_acc > 0.95 and epoch_test_acc > best_acc) or  (epoch_test_acc <= 0.95 and epoch_test_acc > best_acc + 1) ) :
-                best_acc = epoch_test_acc
+            if ( epoch_test_loss < best_loss) :
+                best_loss = epoch_test_loss
                 es = 0
                 self.save_parameter("./save_best/", "best")
             else:
                 es += 1
                 print("Counter {} of 10".format(es))
-
                 if es > 3:
-                    print("Early stopping with best_acc: ", best_acc, "and val_acc for this epoch: ", epoch_test_acc, "...")
+                    print("Early stopping with best_loss: ", best_loss, "and val_acc for this epoch: ", epoch_test_loss, "...")
                     break
         self.save_history()
         self.save_parameter()
@@ -247,18 +242,17 @@ def trainTest():
     # trainer.test(validate_loader)
 
 def perdit():
-    trainer = Train(3, 8, 128, False)
+    trainer = Train(1, 128, False)
     img = torch.ones([3, 128, 128])
     res = trainer.predict_each(img)
     print(res)
 
 if __name__ == "__main__":
     
-    batch_size = 128
-    image_size = 128
-    data_path = r"E:\Dataset\training_set\train"
+    batch_size = 64
+    image_size = 224
 
-    All_dataloader = Dataload(r"E:\Dataset\training_set\train")
+    All_dataloader = Dataload(r'H:\DATASET\COLORDATA\train\train_frame', r'H:\DATASET\COLORDATA\train_gt\train_gt_frame')
 
     train_size = int(len(All_dataloader.photo_set) * 0.8)
     validate_size = len(All_dataloader.photo_set) - train_size
@@ -284,12 +278,13 @@ if __name__ == "__main__":
     method_dict ={
         0:"densecoord",
         1:"mixfpn",
+        2:'SCSUNet',
     }
 
     trainer = Train(
-        3, 8, image_size, 
-        name = "mixfpn",
-        method_type = 1,
+        1, image_size, 
+        name = "SCSUNet",
+        method_type = 2,
         is_show = False
         )
     trainer.train_and_test(20, train_loader, validate_loader)

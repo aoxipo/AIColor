@@ -14,25 +14,21 @@ import glob
 
 
 class Dataload(Dataset):
-    def __init__(self, file_path, gt_path, batch_size=1, data_source=None, gray=False, image_shape=(128, 128)
-                 , same_matrix=False, data_type='train', mask=False):
+    def __init__(self, file_path, gt_path, image_shape=(128, 128), data_type='train'):
         self.total_number = None
 
         self.file_path = file_path
         self.gt_path = gt_path
 
-        self.data_source = data_source
+
         self.batch_size = batch_size
         self.image_shape = image_shape
         self.data_type = data_type
 
         self.photo_set = []
-        self.same_matrix = same_matrix
-        self.gray = gray
         self.set_gan()
         self.load_data(file_path, gt_path)
         
-
     def check_dir(self, path):
         return os.path.exists(path)
 
