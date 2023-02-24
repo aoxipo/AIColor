@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
-from util import *
+from .util import *
 from torchsummary import summary
 
 class UnFlatten(nn.Module):
@@ -74,7 +74,7 @@ class RESUNet(nn.Module):
         self.up = nn.Upsample(scale_factor=4, mode='nearest')
         
     def forward(self, imgs):
-        ## our posenet
+        #print(imgs.size())
         P,C,W,H = imgs.size()
 
         if( C == 1 or C == 3):

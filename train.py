@@ -45,7 +45,7 @@ class Train():
             self.model = Model(in_channel=self.in_channels, layers = [2,2,2,2])
             print("build miffpn model")
         elif(self.method_type == 2):
-            from model.SCSHNet import RESUNet
+            from model.SCSHNet import RESUNet as Model
             self.model = Model(nstack = 1, inp_dim = 1, oup_dim = 128, Conv_method = "Conv",bn=False, increase=0)
         else:
             raise NotImplementedError
@@ -249,11 +249,12 @@ def perdit():
 
 if __name__ == "__main__":
     
-    batch_size = 64
+    batch_size = 32
     image_size = 224
-
-    All_dataloader = Dataload(r'H:\DATASET\COLORDATA\train\train_frame', r'H:\DATASET\COLORDATA\train_gt\train_gt_frame')
-
+    train_path = r'E:\Data\Frame\train\dark\frames'
+    label_path = r'E:\Data\Frame\train\src\frames'
+    #All_dataloader = Dataload(r'H:\DATASET\COLORDATA\train\train_frame', r'H:\DATASET\COLORDATA\train_gt\train_gt_frame')
+    All_dataloader = Dataload(train_path,label_path, image_shape = (image_size, image_size))
     train_size = int(len(All_dataloader.photo_set) * 0.8)
     validate_size = len(All_dataloader.photo_set) - train_size
 

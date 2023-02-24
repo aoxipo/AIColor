@@ -20,8 +20,6 @@ class Dataload(Dataset):
         self.file_path = file_path
         self.gt_path = gt_path
 
-
-        self.batch_size = batch_size
         self.image_shape = image_shape
         self.data_type = data_type
 
@@ -93,7 +91,7 @@ class Dataload(Dataset):
                 
                 imageSrc = self.datagen(self.read_image_data(image_src_path))
                 if len(imageSrc.shape) == 3: # 取默认灰度图像第 1 个通道
-                    imageSrc = imageSrc[0,:,:]
+                    imageSrc = imageSrc[0,:,:].unsqueeze(0)
                 imageDark = self.datagen(self.read_image_data(image_dark_path))
 
             return imageSrc, imageDark
