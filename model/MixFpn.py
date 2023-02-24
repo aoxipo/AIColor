@@ -181,19 +181,10 @@ class MixFpn(nn.Module):
         feature2 = self.cbl_down1(x2)
         x3 = torch.cat([p4, self.cbl_down(feature2)],dim=1)
         return x1,x2,x3
-    def build_results(self,x,y):
-        return {
-            "pred_logits":x,
-            "pred_boxes":y,
-        }
+
     def forward(self,x):
         x = self.feature(x)
         box_coord_1 = self.box_embed1(x[0])
         box_coord_2 = self.box_embed2(x[1])
         box_coord_3 = self.box_embed3(x[2])
-        pred_coord = (box_coord_1 * box_coord_2 * box_coord_3).sigmoid()
-        x = self.conv(x[-1])
-        x = x.view(x.shape[0],-1)
-        x = self.softmax(x)
-        pred_class = self.class_embed(x)
-        return self.build_results(pred_class,pred_coord) if(self.need_return_dict) else [pred_class,pred_coord]
+        return torch.cat([box_coord_1, box_coord_2, box_coord_3],1)

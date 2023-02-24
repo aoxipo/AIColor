@@ -36,7 +36,7 @@ class Train():
     def create(self, is_show):
 
         if(self.method_type == 0):
-            from model.DesNet import DenseCoord as Model
+            from model.DesNet import densenet as Model
             self.model = Model(in_channel=self.in_channels, num_classes=self.out_channels, num_queries = 25)
             print("build dense model")
         elif(self.method_type == 1):
@@ -44,16 +44,16 @@ class Train():
             # layers = [2,2,2,2], num_class = 2, num_require = 25
             self.model = Model(in_channel=self.in_channels, layers = [2,2,2,2], num_classes=self.out_channels, num_queries = 25)
             print("build miffpn model")
+        elif(self.method_type == 2):
+            from model.SCSHNet import RESUNet
+            self.model = Model(nstack = 1, inp_dim = 1, oup_dim = 128, Conv_method = "Conv",bn=False, increase=0)
         else:
             raise NotImplementedError
 
-        self.costCross = torch.nn.CrossEntropyLoss()
-        self.costL2= torch.nn.SmoothL1Loss()
-        # self.cost = torch.nn.MSELoss()
+        self.cost = torch.nn.MSELoss()
         if(use_gpu):
             self.model = self.model.to(device)
-            self.costCross = self.costCross.to(device)
-            self.costL2 = self.costL2.to(device)
+            self.cost = self.cost.to(device)
         if(is_show):
             summary(self.model, ( self.in_channels, self.image_size, self.image_size ))
         
@@ -103,11 +103,8 @@ class Train():
 
     def test(self,data_loader_test):
         self.model.eval()
-        running_correct = 0
         running_loss =0
         test_index = 0
-        coord_loss = 0
-        class_loss = 0
         with torch.no_grad():
             for data in data_loader_test:
                 X_test, y_test = data
@@ -118,31 +115,19 @@ class Train():
 
                 outputs = self.model(X_test)
 
-                lossClass = self.costCross(outputs['pred_logits'].view(-1, self.out_channels + 1), y_test[:,:,0].long().view(-1))
-                lossCoord = self.costL2(outputs["pred_boxes"].float(), y_test[:,:,1:].float())
-                loss = lossClass + lossCoord
-                pred = torch.argmax(outputs['pred_logits'].view(-1, self.out_channels + 1),1)
-                label = y_test[:,:,0].long().view(-1)
-                acc = torch.mean((pred == label).float())
+                loss = self.cost(outputs, y_test)
 
-
-                running_correct += acc.cpu().numpy()
                 running_loss += loss.data.item()
-                coord_loss += lossCoord.data.item()
-                class_loss += lossClass.data.item()
                 test_index += 1
 
-        epoch_acc =  running_correct/(test_index+1)
         epoch_loss = running_loss/(test_index+1)
-        return  epoch_acc, epoch_loss, coord_loss/(test_index+1), class_loss/(test_index+1)
+        return  epoch_loss
             
     def train(self, data_loader_train):
         self.model.train()
-        running_correct = 0
         train_index = 0
         running_loss = 0.0
-        coord_loss = 0
-        class_loss = 0
+
         for data in data_loader_train:
             X_train, y_train  = data
             X_train, y_train = Variable(X_train).float(), Variable(y_train)
@@ -153,29 +138,16 @@ class Train():
             self.optimizer.zero_grad()
 
             outputs  = self.model(X_train)
-            #print(outputs["pred_boxes"])
-            lossClass = self.costCross(outputs['pred_logits'].view(-1, self.out_channels + 1).float(), y_train[:,:,0].long().view(-1))
-            lossCoord = self.costL2(outputs["pred_boxes"].float(), y_train[:,:,1:].float())
-            loss = lossClass + lossCoord
+            loss = self.cost(outputs, y_train)
             #loss = loss.float()
             loss.backward()
             self.optimizer.step()
 
-            pred = torch.argmax(outputs['pred_logits'].view(-1, self.out_channels + 1),1)
-            label = y_train[:,:,0].long().view(-1)
-            acc = torch.mean((pred == label).float())
-            #acc = torch.mean([pred[i].cpu() == label[i] for i in range(len(pred))])
-            #print(acc)
-            coord_loss += lossCoord.data.item()
-            class_loss += lossClass.data.item()
-
             running_loss += loss.data.item()
-            running_correct += acc.cpu().data.item()
             train_index += 1
 
-        epoch_train_acc = running_correct/train_index
         epoch_train_loss = running_loss/train_index
-        return epoch_train_acc, epoch_train_loss, coord_loss/train_index, class_loss/train_index
+        return epoch_train_loss
 
     def predict_batch(self, image):
 

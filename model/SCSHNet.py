@@ -44,12 +44,12 @@ class RESUNet(nn.Module):
         print("using :",Conv_method)
         self.pre = nn.Sequential(
             self.conv_type_dict[self.Conv_method](inp_dim, 64, 7, 2, bn=True, relu=True),
-            Residual(64, 128, self.conv_type_dict[self.Conv_method]),
+            Residual(64, oup_dim, self.conv_type_dict[self.Conv_method]),
             Pool(2, 2),
             #Residual(64, 128, self.conv_type_dict[self.Conv_method]),
-            Residual(128,128, self.conv_type_dict[self.Conv_method]),
+            Residual(oup_dim,oup_dim, self.conv_type_dict[self.Conv_method]),
         )
-        self.break_up = Residual(128, inp_dim, self.conv_type_dict[self.Conv_method])
+        self.break_up = Residual(oup_dim, inp_dim, self.conv_type_dict[self.Conv_method])
         self.hgs = nn.ModuleList( [
         nn.Sequential(
             Hourglass(4, inp_dim, bn, increase),
@@ -65,7 +65,7 @@ class RESUNet(nn.Module):
         self.merge_features = nn.ModuleList( [Merge(inp_dim, inp_dim) for i in range(nstack-1)] )
         self.merge_preds = nn.ModuleList( [Merge(oup_dim, inp_dim) for i in range(nstack-1)] )
         self.merge = nn.Sequential(
-            nn.Conv2d(nstack*128,9,2,2),
+            nn.Conv2d(nstack*oup_dim,9,2,2),
             nn.Conv2d(9,9,2,2)
         )
         self.head =  nn.Conv2d(9,3,1,1)
@@ -86,16 +86,16 @@ class RESUNet(nn.Module):
         x_origin = x 
         x = self.pre(x)
         x = self.break_up(x)
-        print('res:',x.size())
+        #print('res:',x.size())
         combined_hm_preds = []
        
         for i in range(self.nstack):
             hg = self.hgs[i](x_backup)
-            print("hg:",hg.size())
+            #print("hg:",hg.size())
             feature = self.features[i](hg)
-            print("feature:",feature.size())
+            #print("feature:",feature.size())
             preds = self.outs[i](feature)
-            print("preds:", preds.size())
+            #print("preds:", preds.size())
             combined_hm_preds.append(preds)
             if i < self.nstack - 1:
                 x_backup = x_backup + self.merge_preds[i](preds) + self.merge_features[i](feature)
@@ -103,7 +103,7 @@ class RESUNet(nn.Module):
         attention_map = torch.mul(self.merge(multi_map),x)
         color_offset = self.head(attention_map)
         x_color = x_origin + self.up(color_offset)
-        return x_color #torch.stack(combined_hm_preds, 1)
+        return x_color#, torch.stack(combined_hm_preds, 1)
 
     def calc_loss(self, combined_hm_preds, heatmaps):
         combined_loss = []

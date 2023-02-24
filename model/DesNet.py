@@ -72,13 +72,7 @@ class densenet(nn.Module):
         x = self.TL3(x)
         x = self.DB4(x)
         x = self.global_average(x)
-        x = x.view(x.shape[0], -1)
-        #print(x.size())
-        #a = self.ea(x)
-        #print(a.size())
-        x = self.classifier(x)
-        #print(x.size())
-        return self.build_results(x) if(self.need_return_dict) else x
+        return x
 
     def _make_dense_block(self,channels, growth_rate, num):
         block = []
