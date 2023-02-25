@@ -47,6 +47,9 @@ class Train():
         elif(self.method_type == 2):
             from model.SCSHNet import RESUNet as Model
             self.model = Model(nstack = 1, inp_dim = 1, oup_dim = 128, Conv_method = "Conv",bn=False, increase=0)
+        elif(self.method_type == 2):
+            from model.SCSHNet import RESUNet_D as Model
+            self.model = Model(nstack = 1, inp_dim = 1, oup_dim = 128, Conv_method = "Conv",bn=False, increase=0)
         else:
             raise NotImplementedError
 
@@ -271,7 +274,7 @@ if __name__ == "__main__":
     )
     validate_loader = DataLoader(
         dataset=validate_dataset,
-        batch_size=32,
+        batch_size=batch_size,
         shuffle=False,
         drop_last=True,
     )
@@ -280,12 +283,13 @@ if __name__ == "__main__":
         0:"densecoord",
         1:"mixfpn",
         2:'SCSUNet',
+        3:"SCSUNet_D",
     }
 
     trainer = Train(
         1, image_size, 
-        name = "SCSUNet",
-        method_type = 2,
+        name = "SCSUNet_D",
+        method_type = 3,
         is_show = False
         )
-    trainer.train_and_test(20, train_loader, validate_loader)
+    trainer.train_and_test(100, train_loader, validate_loader)
