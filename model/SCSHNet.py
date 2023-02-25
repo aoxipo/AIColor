@@ -211,11 +211,10 @@ class RESUNet_D(nn.Module):
             x = imgs.permute(0, 3, 1, 2) #x of size 1,3,inpdim,inpdim
             
         x_backup = x
-        x_origin = x 
         x = self.pre(x)
         x = self.break_up(x)
-        print('res:',x.size())
-        combined_hm_preds = []
+        #print('res:',x.size())
+
         r = self.hgs_r_pip(x_backup)
         g = self.hgs_g_pip(x_backup)
         b = self.hgs_b_pip(x_backup)
@@ -232,13 +231,13 @@ class RESUNet_D(nn.Module):
         r_attention_map = torch.mul(r_multi_map,x)
         g_attention_map = torch.mul(g_multi_map,x)
         b_attention_map = torch.mul(b_multi_map,x)
-        print(r_attention_map.size())
+        #print(r_attention_map.size())
         color_r_offset = self.head[0](r_attention_map)
         color_g_offset = self.head[1](g_attention_map)
         color_b_offset = self.head[2](b_attention_map)
         color_offset = torch.cat([color_r_offset, color_g_offset, color_b_offset],1)
         x_color = self.up(color_offset)
-        print(x_color.size())
+        #print(x_color.size())
         return x_color #torch.stack(combined_hm_preds, 1)
 
     def calc_loss(self, combined_hm_preds, heatmaps):
