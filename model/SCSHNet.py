@@ -181,9 +181,9 @@ class RESUNet_D(nn.Module):
             Residual(128,128, self.conv_type_dict[self.Conv_method]),
         )
         self.break_up = Residual(128, 1, self.conv_type_dict[self.Conv_method])
-        self.hgs_r_pip = ResUnetBlock(nstack, inp_dim, oup_dim, bn, increase, self.conv_type_dict[self.Conv_method])
-        self.hgs_g_pip = ResUnetBlock(nstack, inp_dim, oup_dim, bn, increase, self.conv_type_dict[self.Conv_method])
-        self.hgs_b_pip = ResUnetBlock(nstack, inp_dim, oup_dim, bn, increase, self.conv_type_dict[self.Conv_method])
+        self.hgs_r_pip = ResUnetBlock(nstack, 1, oup_dim, bn, increase, self.conv_type_dict[self.Conv_method])
+        self.hgs_g_pip = ResUnetBlock(nstack, 1, oup_dim, bn, increase, self.conv_type_dict[self.Conv_method])
+        self.hgs_b_pip = ResUnetBlock(nstack, 1, oup_dim, bn, increase, self.conv_type_dict[self.Conv_method])
         
         #self.merge_features = nn.ModuleList( [Merge(inp_dim, inp_dim) for i in range(nstack-1)] )
         #self.merge_preds = nn.ModuleList( [Merge(oup_dim, inp_dim) for i in range(nstack-1)] )
@@ -215,9 +215,9 @@ class RESUNet_D(nn.Module):
         x = self.break_up(x)
         #print('res:',x.size())
 
-        r = self.hgs_r_pip(x_backup)
-        g = self.hgs_g_pip(x_backup)
-        b = self.hgs_b_pip(x_backup)
+        r = self.hgs_r_pip(x_backup[:,0,:,:].unsqueeze(1))
+        g = self.hgs_g_pip(x_backup[:,1,:,:].unsqueeze(1))
+        b = self.hgs_b_pip(x_backup[:,2,:,:].unsqueeze(1))
         
         r_multi_map = torch.cat(r, 1)
         g_multi_map = torch.cat(g, 1)
