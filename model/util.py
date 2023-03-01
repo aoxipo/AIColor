@@ -1,4 +1,6 @@
 from torch import nn
+import torch
+import matplotlib.pyplot as plt
 
 Pool = nn.MaxPool2d
 
@@ -127,3 +129,40 @@ class Hourglass(nn.Module):
         low3 = self.low3(low2)
         up2  = self.up2(low3)
         return up1 + up2
+
+
+def _weights_init(m):
+    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+        nn.init.normal_(m.weight, 0.0, 0.02)
+    if isinstance(m, nn.BatchNorm2d):
+        nn.init.normal_(m.weight, 0.0, 0.02)
+        nn.init.constant_(m.bias, 0)
+
+def display_progress(cond, real, fake, current_epoch = 0, figsize=(20,15), save = False, save_path = 'D:'):
+    """
+    Save cond, real (original) and generated (fake)
+    images in one panel 
+    """
+    cond = cond.detach().cpu().permute(1, 2, 0)   
+    real = real.detach().cpu().permute(1, 2, 0)
+    fake = fake.detach().cpu().permute(1, 2, 0)
+    
+    images = [cond, real, fake]
+    titles = ['input','real','generated']
+    print(f'Epoch: {current_epoch}')
+    fig, ax = plt.subplots(1, 3, figsize=figsize)
+    for idx,img in enumerate(images):
+        if idx == 0:
+            imgan = images[0]
+        else:
+            imgan = img
+        ax[idx].imshow(imgan)
+        ax[idx].axis("off")
+    for idx, title in enumerate(titles):    
+        ax[idx].set_title('{}'.format(title))
+    if save:
+        f = plt.gcf()  #获取当前图像
+        f.savefig(save_path + '/{}.png'.format(current_epoch))
+        f.clear()  #释放
+    else:
+        plt.show()
