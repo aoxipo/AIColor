@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 from dataloader import Dataload
 from model.util import *
 from torch.utils.data import DataLoader
-
+device = 'cuda:0'
 class DFGAN(pl.LightningModule):
 
     def __init__(self, in_channels, out_channels, learning_rate=0.0002, lambda_recon=100, display_step=10, lambda_gp=10, lambda_r1=10,):
@@ -48,7 +48,8 @@ class DFGAN(pl.LightningModule):
     def critic_step(self, real_images, conditioned_images):
         self.optimizer_C.zero_grad()
         fake_images = self.generator(conditioned_images)
-        fake_logits = self.critic(fake_images[-1])
+        fake_images = fake_images[-1]
+        fake_logits = self.critic(fake_images)
         real_logits = self.critic(real_images)
         
         # Compute the loss for the critic
@@ -88,6 +89,7 @@ class DFGAN(pl.LightningModule):
         crit_mean = sum(self.critic_losses[-self.display_step:]) / self.display_step
         if self.current_epoch%self.display_step==0 and batch_idx==0 and optimizer_idx==1:
             fake = self.generator(condition).detach()
+            fake = fake[-1]
             torch.save(self.generator.state_dict(), "./save/ResUnet_"+ str(self.current_epoch) +".pt")
             torch.save(self.critic.state_dict(), "./save/PatchGAN_"+ str(self.current_epoch) +".pt")
             print(f"Epoch {self.current_epoch} : Generator loss: {gen_mean}, Critic loss: {crit_mean}")
