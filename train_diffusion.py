@@ -59,7 +59,7 @@ class DFGAN(pl.LightningModule):
         alpha = alpha.to(device)
         interpolated = (alpha * real_images + (1 - alpha) * fake_images.detach()).requires_grad_(True)
         
-        interpolated_logits = self.critic(interpolated, conditioned_images)
+        interpolated_logits = self.critic(interpolated)
         
         grad_outputs = torch.ones_like(interpolated_logits, dtype=torch.float32, requires_grad=True)
         gradients = torch.autograd.grad(outputs=interpolated_logits, inputs=interpolated, grad_outputs=grad_outputs,create_graph=True, retain_graph=True)[0]
