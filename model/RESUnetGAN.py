@@ -5,19 +5,67 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torchsummary import summary
 device = 0
+class DWConv(nn.Module):
+    def __init__(self, inp_dim, out_dim, kernel_size=3, padding = None, stride = 1, bn = False, relu = True, bias = False):
+        super(DWConv, self).__init__()
+        self.inp_dim = inp_dim
+        if padding is None:
+            padding = (kernel_size-1)//2
+        self.depthwise = nn.Conv2d(inp_dim, inp_dim, kernel_size, stride, padding = padding, groups=inp_dim,bias=inp_dim)
+        self.pointwise = nn.Conv2d(inp_dim, out_dim, kernel_size=1, groups=1)
+        self.relu = None
+        self.bn = None
+        if relu:
+            self.relu = nn.ReLU()
+        if bn:
+            self.bn = nn.BatchNorm2d(out_dim)
+
+    def forward(self, x):
+        assert x.size()[1] == self.inp_dim, "{} {}".format(x.size()[1], self.inp_dim)
+        x = self.depthwise(x)
+        x = self.pointwise(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        if self.relu is not None:
+            x = self.relu(x)
+        return x
+
+class Conv(nn.Module):
+    def __init__(self, inp_dim, out_dim, kernel_size=3, stride = 1, bn = False, relu = True, padding = None, bias = True):
+        super(Conv, self).__init__()
+        self.inp_dim = inp_dim
+        if padding is None:
+            padding = (kernel_size-1)//2
+        self.conv = nn.Conv2d(inp_dim, out_dim, kernel_size, stride, padding=padding, bias = bias)
+        self.relu = None
+        self.bn = None
+        if relu:
+            self.relu = nn.ReLU()
+        if bn:
+            self.bn = nn.BatchNorm2d(out_dim)
+
+    def forward(self, x):
+        assert x.size()[1] == self.inp_dim, "{} {}".format(x.size()[1], self.inp_dim)
+        x = self.conv(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        if self.relu is not None:
+            x = self.relu(x)
+        return x
+
 class ResBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1):
+    def __init__(self, in_channels, out_channels, Conv_method = Conv):
         super().__init__()
         self.layer = nn.Sequential(
-            nn.Conv2d(in_channels,out_channels,kernel_size=3, padding=1, stride=stride, bias=False),
+            Conv_method(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels,kernel_size=3,padding=1, stride=1, bias=False),
+            Conv_method(out_channels, out_channels,kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
 
-        self.identity_map = nn.Conv2d(in_channels, out_channels,kernel_size=1,stride=stride)
+        self.identity_map = Conv_method(in_channels, out_channels,kernel_size=1, stride=1)
         self.relu = nn.ReLU(inplace=True)
     def forward(self, inputs):
         x = inputs.clone().detach()
@@ -25,7 +73,7 @@ class ResBlock(nn.Module):
         residual  = self.identity_map(inputs)
         skip = out + residual
         return self.relu(skip)
-    
+
 class DownSampleConv(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
@@ -51,16 +99,16 @@ class UpSampleConv(nn.Module):
         return x
 
 class Generator(nn.Module):
-    def __init__(self, input_channel, output_channel, dropout_rate = 0.2):
+    def __init__(self, input_channel, output_channel, dropout_rate = 0.2, middle_channel = [64,128,256,512]):
         super().__init__()
-        self.encoding_layer1_ = ResBlock(input_channel,64)
-        self.encoding_layer2_ = DownSampleConv(64, 128)
-        self.encoding_layer3_ = DownSampleConv(128, 256)
-        self.bridge = DownSampleConv(256, 512)
-        self.decoding_layer3_ = UpSampleConv(512, 256)
-        self.decoding_layer2_ = UpSampleConv(256, 128)
-        self.decoding_layer1_ = UpSampleConv(128, 64)
-        self.output = nn.Conv2d(64, output_channel, kernel_size=1)
+        self.encoding_layer1_ = ResBlock(input_channel, middle_channel[0])
+        self.encoding_layer2_ = DownSampleConv(middle_channel[0], middle_channel[1])
+        self.encoding_layer3_ = DownSampleConv(middle_channel[1], middle_channel[2])
+        self.bridge = DownSampleConv(middle_channel[2], middle_channel[3])
+        self.decoding_layer3_ = UpSampleConv(middle_channel[3], middle_channel[2])
+        self.decoding_layer2_ = UpSampleConv(middle_channel[2], middle_channel[1])
+        self.decoding_layer1_ = UpSampleConv(middle_channel[1], middle_channel[0])
+        self.output = nn.Conv2d(middle_channel[0], output_channel, kernel_size=1)
         self.dropout = nn.Dropout2d(dropout_rate)
         
     def forward(self, inputs):
@@ -84,7 +132,81 @@ class Generator(nn.Module):
         ###################### Output #########################
         output = self.output(d1)
         return output
-    
+
+class Hourglass(nn.Module):
+    def __init__(self, n, f, bn=None, increase=0):
+        super(Hourglass, self).__init__()
+        nf = f + increase
+        self.up1 = ResBlock(f, f)
+        # Lower branch
+        self.pool1 = nn.MaxPool2d(2, 2)
+        self.low1 = ResBlock(f, nf)
+        self.n = n
+        # Recursive hourglass
+        if self.n > 1:
+            self.low2 = Hourglass(n-1, nf, bn=bn)
+        else:
+            self.low2 = ResBlock(nf, nf)
+        self.low3 = ResBlock(nf, f)
+        self.up2 = nn.Upsample(scale_factor=2, mode='nearest')
+
+    def forward(self, x):
+        up1  = self.up1(x)
+        pool1 = self.pool1(x)
+        low1 = self.low1(pool1)
+        low2 = self.low2(low1)
+        low3 = self.low3(low2)
+        up2  = self.up2(low3)
+        return up1 + up2
+
+class HgDiffusion(nn.Module):
+    def __init__(self, nstack, input_channel, output_channel, conv_method = 'Conv', bn=False, increase=0, dropout_rate = 0.2):
+        super().__init__()
+        self.nstack = nstack
+        self.input_channel = input_channel
+        self.output_channel = output_channel
+        self.Conv_method = conv_method
+        self.conv_type_dict = {
+            "DWConv":DWConv,
+            "Conv":Conv,
+        }
+        self.conv = self.conv_type_dict[self.Conv_method]
+        self.hgs = nn.ModuleList( [
+            nn.Sequential(
+                Generator(input_channel, output_channel),
+            ) for i in range(nstack)] 
+        )
+        self.features = nn.ModuleList( [
+            nn.Sequential(
+            ResBlock(input_channel, output_channel, self.conv),
+            self.conv(input_channel, output_channel, 1, bn=True, relu=True)
+        ) for i in range(nstack)] )
+        self.outs = nn.ModuleList( [self.conv(input_channel, output_channel, 1, relu=False, bn=False) for i in range(nstack)] )
+        self.merge_features = nn.ModuleList( [self.conv(input_channel, input_channel) for i in range(nstack-1)] )
+        self.merge_preds = nn.ModuleList( [self.conv(output_channel, output_channel) for i in range(nstack-1)] )
+        
+    def forward(self, inputs):
+        P,C,W,H = inputs.size()
+        if( C == 1 or C == 3):
+            x = inputs
+        else:
+            x = inputs.permute(0, 3, 1, 2) #x of size 1,3,inpdim,inpdim
+
+        x_backup = x
+        combined_hm_preds = []
+        for i in range(self.nstack):
+            hg = self.hgs[i](x_backup)
+            print("hg:",hg.size())
+            feature = self.features[i](hg)
+            #print("feature:",feature.size())
+            preds = self.outs[i](feature)
+            #print("preds:", preds.size())
+            combined_hm_preds.append(preds)
+            if i < self.nstack - 1:
+                x_backup = x_backup + self.merge_preds[i](preds) + self.merge_features[i](feature)
+
+        return combined_hm_preds
+
 class Critic(nn.Module):
     def __init__(self, in_channels=3):
         super(Critic, self).__init__()
@@ -117,7 +239,7 @@ class CWGAN(nn.Module):
         self.display_step = display_step
         
         self.generator = Generator(in_channels, out_channels)
-        self.critic = Critic(in_channels + out_channels)
+        self.critic = Critic(out_channels)
         self.optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=learning_rate, betas=(0.5, 0.9))
         self.optimizer_C = torch.optim.Adam(self.critic.parameters(), lr=learning_rate, betas=(0.5, 0.9))
         self.lambda_recon = lambda_recon
@@ -140,12 +262,11 @@ class CWGAN(nn.Module):
         # Keep track of the average generator loss
         self.generator_losses += [recon_loss.item()]
         
-        
     def critic_step(self, real_images, conditioned_images):
         self.optimizer_C.zero_grad()
         fake_images = self.generator(conditioned_images)
-        fake_logits = self.critic(fake_images, conditioned_images)
-        real_logits = self.critic(real_images, conditioned_images)
+        fake_logits = self.critic(fake_images)
+        real_logits = self.critic(real_images)
         
         # Compute the loss for the critic
         loss_C = real_logits.mean() - fake_logits.mean()
@@ -155,7 +276,7 @@ class CWGAN(nn.Module):
         alpha = alpha.to(device)
         interpolated = (alpha * real_images + (1 - alpha) * fake_images.detach()).requires_grad_(True)
         
-        interpolated_logits = self.critic(interpolated, conditioned_images)
+        interpolated_logits = self.critic(interpolated)
         
         grad_outputs = torch.ones_like(interpolated_logits, dtype=torch.float32, requires_grad=True)
         gradients = torch.autograd.grad(outputs=interpolated_logits, inputs=interpolated, grad_outputs=grad_outputs,create_graph=True, retain_graph=True)[0]
@@ -177,11 +298,11 @@ class CWGAN(nn.Module):
     def training_step(self, batch, batch_idx):
         real, condition = batch
         self.critic_step(real, condition)
-        
         self.generator_step(real, condition)
         gen_mean = sum(self.generator_losses[-self.display_step:]) / self.display_step
         crit_mean = sum(self.critic_losses[-self.display_step:]) / self.display_step
-
+        return gen_mean, crit_mean
+    
         if batch_idx %self.display_step==0:
             fake = self.generator(condition).detach()
             torch.save(self.generator.state_dict(), "ResUnet_"+ str(batch_idx) +".pt")

@@ -14,14 +14,7 @@ def PSAlgorithm(rgb_img, increment):
     value = (img_max + img_min) / 255.0
     L = value/2.0
     mask_1 = L < 0.5
-    if value == 0 :
-        s1 = 0.5
-    else:
-        s1 = delta/(value)
-    if value == 2:
-        s2 = 0.5
-    else:
-        s2 = delta/(2 - value)
+    1
     s = s1 * mask_1 + s2 * (1 - mask_1)
     if increment >= 0:
         temp = increment + s

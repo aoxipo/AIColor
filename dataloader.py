@@ -14,7 +14,7 @@ import glob
 
 
 class Dataload(Dataset):
-    def __init__(self, file_path, gt_path, image_shape=(128, 128), data_type='train'):
+    def __init__(self, file_path, gt_path, image_shape=(224, 224), data_type='train'):
         self.total_number = None
 
         self.file_path = file_path
@@ -25,7 +25,10 @@ class Dataload(Dataset):
 
         self.photo_set = []
         self.set_gan()
-        self.load_data(file_path, gt_path)
+        if data_type == 'train':
+            self.load_data(file_path, gt_path)
+        else:
+            self.load_data_new(file_path)
         
     def check_dir(self, path):
         return os.path.exists(path)
@@ -33,7 +36,8 @@ class Dataload(Dataset):
     def read_image_data(self, file_path):
         image = cv2.imread(file_path)
         if(image is None):
-             raise RuntimeError('image can \'t read:' + file_path)
+            return None
+            #raise RuntimeError('image can \'t read:' + file_path)
         return image
 
     def set_gan(self):
@@ -46,6 +50,26 @@ class Dataload(Dataset):
             transforms.Normalize(cifar_norm_mean, cifar_norm_std),
         ]
         self.datagen = transforms.Compose(method_list)
+
+    def load_data_new(self, file_path):
+        photo_path_set = []
+        if file_path[-1] != '/' or file_path[-1] != '\\':
+            file_path = file_path + '/'
+        label_path = file_path + 'Label'
+        image_name_list = os.listdir(file_path)
+        for image_name in image_name_list:
+            if image_name[-3:] != 'PNG':
+                continue
+            image_label_path = label_path + '/' + image_name.split('.')[0] + '_label.PNG'
+            image_path = file_path + '/' + image_name
+            photo_path_set.append({
+                    "image":image_path,
+                    "gt":image_label_path,
+                })
+            
+        self.photo_set = photo_path_set
+        self.total_number = len(self.photo_set)
+        print("total:", self.total_number)
 
     def load_data(self, file_path, gt_path):
         # 对应文件夹的地址
@@ -90,9 +114,12 @@ class Dataload(Dataset):
                 image_src_path, image_dark_path = self.photo_set[re_index]['image'], self.photo_set[re_index]['gt']
                 
                 imageSrc = self.datagen(self.read_image_data(image_src_path))
-                if len(imageSrc.shape) == 3: # 取默认灰度图像第 1 个通道
-                    imageSrc = imageSrc[0,:,:].unsqueeze(0)
-                imageDark = self.datagen(self.read_image_data(image_dark_path))
+                # if len(imageSrc.shape) == 3: # 取默认灰度图像第 1 个通道
+                #     imageSrc = imageSrc[0,:,:].unsqueeze(0)
+                imageDark = self.read_image_data(image_dark_path)
+                if imageDark is None:
+                    imageDark = np.zeros((512,512,3))
+                imageDark = self.datagen(imageDark)
 
             return imageSrc, imageDark
 

@@ -6,14 +6,14 @@ from dataloader import Dataload
 from model.util import *
 from torch.utils.data import DataLoader
 
-class CWGAN(pl.LightningModule):
+class DFGAN(pl.LightningModule):
 
     def __init__(self, in_channels, out_channels, learning_rate=0.0002, lambda_recon=100, display_step=10, lambda_gp=10, lambda_r1=10,):
         super().__init__()
         self.save_hyperparameters()
         self.display_step = display_step
-        
-        self.generator = Generator(in_channels, out_channels)
+        self.nstack = 4
+        self.generator = HgDiffusion(self.nstack, in_channels, out_channels, 'Conv')
         self.critic = Critic(out_channels)
         self.optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=learning_rate, betas=(0.5, 0.9))
         self.optimizer_C = torch.optim.Adam(self.critic.parameters(), lr=learning_rate, betas=(0.5, 0.9))
@@ -31,18 +31,24 @@ class CWGAN(pl.LightningModule):
         # WGAN has only a reconstruction loss
         self.optimizer_G.zero_grad()
         fake_images = self.generator(conditioned_images)
-        recon_loss = self.recon_criterion(fake_images, real_images)
+      
+        recon_loss = 0
+        for i in range(self.nstack):
+            alpha = (i+1)/self.nstack
+            label = alpha * real_images + ( 1 - alpha ) * conditioned_images
+            recon_loss += self.recon_criterion(fake_images[i], label)
+        
         recon_loss.backward()
         self.optimizer_G.step()
         
         # Keep track of the average generator loss
-        self.generator_losses += [recon_loss.item()]
+        self.generator_losses += [recon_loss.item()/self.nstack]
         
         
     def critic_step(self, real_images, conditioned_images):
         self.optimizer_C.zero_grad()
         fake_images = self.generator(conditioned_images)
-        fake_logits = self.critic(fake_images)
+        fake_logits = self.critic(fake_images[-1])
         real_logits = self.critic(real_images)
         
         # Compute the loss for the critic
@@ -115,7 +121,7 @@ if __name__ == '__main__':
         drop_last=True,
     )
 
-    cwgan = CWGAN(in_channels = 3, out_channels = 3 ,learning_rate=2e-4, lambda_recon=100, display_step=10)
+    cwgan = DFGAN(in_channels = 3, out_channels = 3 ,learning_rate=2e-4, lambda_recon=100, display_step=10)
     cwgan.save_path = "./save"
     trainer = pl.Trainer(max_epochs=100, gpus=-1)
     trainer.fit(cwgan, train_loader)

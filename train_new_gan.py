@@ -31,43 +31,84 @@ class Train():
         self.history_loss = []
         self.history_test_acc = []
         self.history_test_loss = []
+        self.generator_losses, self.critic_losses  = [],[]
         self.create(is_show)
     
     def create(self, is_show):
 
         if(self.method_type == 0):
             from model.DesNet import densenet as Model
-            self.model = Model(in_channel=self.in_channels)
+            self.model = Model(in_channel = self.in_channels)
             print("build dense model")
-        elif self.method_type == 1:
-            from model.RESUNet import RESUNet as Model
-            self.model = Model(in_channel=self.in_channels)
-            print("build RESUNet model")
-        elif(self.method_type == 12):
-            from model.MixFpn import MixFpn as Model
-            # layers = [2,2,2,2], num_class = 2, num_require = 25
-            self.model = Model(in_channel=self.in_channels, layers = [2,2,2,2])
-            print("build miffpn model")
         elif(self.method_type == 2):
             from model.SCSHNet import RESUNet as Model
-            self.model = Model(nstack = 1, inp_dim = 1, oup_dim = 128, Conv_method = "Conv",bn=False, increase=0)
+            self.model = Model(nstack = 1, inp_dim = self.in_channels, oup_dim = 128, Conv_method = "Conv",bn=False, increase=0)
+            from model.RESUnetGAN import Critic 
+            self.critic = Critic(2 * self.in_channels)
+            print('build resUnet gan net')
         elif(self.method_type == 23):
             from model.SCSHNet import RESUNet_D as Model
             self.model = Model(nstack = 1, inp_dim = 1, oup_dim = 128, Conv_method = "Conv",bn=False, increase=0)
         else:
             raise NotImplementedError
+        
+        self.lambda_recon = 100
+        self.lambda_gp = 10
+        self.lambda_r1 = 10
 
-        self.cost = torch.nn.MSELoss()
+        self.cost = torch.nn.L1Loss()
+        self.optimizer_G = torch.optim.Adam(self.model.parameters(), lr = self.lr, betas=(0.5, 0.9))
+        self.optimizer_C = torch.optim.Adam(self.critic.parameters(), lr = self.lr, betas=(0.5, 0.9))
+        
         if(use_gpu):
             self.model = self.model.to(device)
             self.cost = self.cost.to(device)
         if(is_show):
             summary(self.model, ( self.in_channels, self.image_size, self.image_size ))
         
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr = self.lr, betas=(0.5, 0.999))
+    def generator_step(self, real_images, conditioned_images):
+        self.optimizer_G.zero_grad()
+        fake_images = self.model(conditioned_images)
+        recon_loss = self.cost(fake_images, real_images)
+        recon_loss.backward()
+        self.optimizer_G.step()
+        self.generator_losses += [recon_loss.item()]
+
+    def critic_step(self, real_images, conditioned_images):
+        self.optimizer_C.zero_grad()
+        fake_images = self.model(conditioned_images)
+        fake_logits = self.critic(fake_images, conditioned_images)
+        real_logits = self.critic(real_images, conditioned_images)
+        
+        # Compute the loss for the critic
+        loss_C = real_logits.mean() - fake_logits.mean()
+
+        # Compute the gradient penalty
+        alpha = torch.rand(real_images.size(0), 1, 1, 1, requires_grad=True)
+        alpha = alpha.to(device)
+        interpolated = (alpha * real_images + (1 - alpha) * fake_images.detach()).requires_grad_(True)
+        
+        interpolated_logits = self.critic(interpolated, conditioned_images)
+        
+        grad_outputs = torch.ones_like(interpolated_logits, dtype=torch.float32, requires_grad=True)
+        gradients = torch.autograd.grad(outputs=interpolated_logits, inputs=interpolated, grad_outputs=grad_outputs,create_graph=True, retain_graph=True)[0]
+
+        
+        gradients = gradients.view(len(gradients), -1)
+        gradients_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        loss_C += self.lambda_gp * gradients_penalty
+        
+        # Compute the R1 regularization loss
+        r1_reg = gradients.pow(2).sum(1).mean()
+        loss_C += self.lambda_r1 * r1_reg
+
+        # Backpropagation
+        loss_C.backward()
+        self.optimizer_C.step()
+        self.critic_losses += [loss_C.item()]
 
     def train_and_test(self, n_epochs, data_loader_train, data_loader_test):
-        best_loss = 1000000
+        best_loss = 100000
         es = 0
         for epoch in range(n_epochs):
             start_time =datetime.datetime.now()

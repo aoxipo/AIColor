@@ -83,7 +83,6 @@ class RESUNet(nn.Module):
             x = imgs.permute(0, 3, 1, 2) #x of size 1,3,inpdim,inpdim
             
         x_backup = x
-        x_origin = x 
         x = self.pre(x)
         x = self.break_up(x)
         #print('res:',x.size())
@@ -102,7 +101,7 @@ class RESUNet(nn.Module):
         multi_map = torch.cat(combined_hm_preds, 1)
         attention_map = torch.mul(self.merge(multi_map),x)
         color_offset = self.head(attention_map)
-        x_color = x_origin + self.up(color_offset)
+        x_color = self.up(color_offset)
         return x_color#, torch.stack(combined_hm_preds, 1)
 
     def calc_loss(self, combined_hm_preds, heatmaps):
