@@ -117,8 +117,6 @@ class Dataload(Dataset):
                 # if len(imageSrc.shape) == 3: # 取默认灰度图像第 1 个通道
                 #     imageSrc = imageSrc[0,:,:].unsqueeze(0)
                 imageDark = self.read_image_data(image_dark_path)
-                if imageDark is None:
-                    imageDark = np.zeros((512,512,3))
                 imageDark = self.datagen(imageDark)
 
             return imageSrc, imageDark

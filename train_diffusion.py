@@ -125,5 +125,5 @@ if __name__ == '__main__':
 
     cwgan = DFGAN(in_channels = 3, out_channels = 3 ,learning_rate=2e-4, lambda_recon=100, display_step=10)
     cwgan.save_path = "./save"
-    trainer = pl.Trainer(max_epochs=100, gpus=-1)
+    trainer = pl.Trainer(max_epochs=100, gpus=[1])
     trainer.fit(cwgan, train_loader)
