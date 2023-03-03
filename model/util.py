@@ -1,7 +1,8 @@
 from torch import nn
 import torch
 import matplotlib.pyplot as plt
-
+import numpy as np
+import cv2
 Pool = nn.MaxPool2d
 
 def batchnorm(x):
@@ -143,9 +144,9 @@ def display_progress(cond, real, fake, current_epoch = 0, figsize=(20,15), save 
     Save cond, real (original) and generated (fake)
     images in one panel 
     """
-    cond = cond.detach().cpu().permute(1, 2, 0)   
-    real = real.detach().cpu().permute(1, 2, 0)
-    fake = fake.detach().cpu().permute(1, 2, 0)
+    cond = cond.detach().cpu().permute(1, 2, 0).numpy()   
+    real = real.detach().cpu().permute(1, 2, 0).numpy()
+    fake = fake.detach().cpu().permute(1, 2, 0).numpy()
     
     images = [cond, real, fake]
     titles = ['input','real','generated']
@@ -156,6 +157,8 @@ def display_progress(cond, real, fake, current_epoch = 0, figsize=(20,15), save 
             imgan = images[0]
         else:
             imgan = img
+        imgan = np.array((imgan - np.min(imgan))/(np.max(imgan) - np.min(imgan)) * 255, dtype = np.uint8)
+        imgan = cv2.cvtColor(imgan, cv2.COLOR_RGB2BGR)
         ax[idx].imshow(imgan)
         ax[idx].axis("off")
     for idx, title in enumerate(titles):    

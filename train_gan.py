@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 from dataloader import Dataload
 from model.util import *
 from torch.utils.data import DataLoader
-
+device = 'cuda:0'
 class CWGAN(pl.LightningModule):
 
     def __init__(self, in_channels, out_channels, learning_rate=0.0002, lambda_recon=100, display_step=10, lambda_gp=10, lambda_r1=10,):
@@ -53,7 +53,7 @@ class CWGAN(pl.LightningModule):
         alpha = alpha.to(device)
         interpolated = (alpha * real_images + (1 - alpha) * fake_images.detach()).requires_grad_(True)
         
-        interpolated_logits = self.critic(interpolated, conditioned_images)
+        interpolated_logits = self.critic(interpolated)
         
         grad_outputs = torch.ones_like(interpolated_logits, dtype=torch.float32, requires_grad=True)
         gradients = torch.autograd.grad(outputs=interpolated_logits, inputs=interpolated, grad_outputs=grad_outputs,create_graph=True, retain_graph=True)[0]
@@ -85,7 +85,7 @@ class CWGAN(pl.LightningModule):
             torch.save(self.generator.state_dict(), "./save/ResUnet_"+ str(self.current_epoch) +".pt")
             torch.save(self.critic.state_dict(), "./save/PatchGAN_"+ str(self.current_epoch) +".pt")
             print(f"Epoch {self.current_epoch} : Generator loss: {gen_mean}, Critic loss: {crit_mean}")
-            display_progress(condition[0], real[0], fake[0], self.current_epoch, True, self.save_path)
+            display_progress(condition[0], real[0], fake[0], self.current_epoch, (20,15), True, self.save_path)
         
 if __name__ == '__main__':
 

@@ -4,7 +4,7 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 from torchsummary import summary
-device = 0
+device = 'cuda:1'
 class DWConv(nn.Module):
     def __init__(self, inp_dim, out_dim, kernel_size=3, padding = None, stride = 1, bn = False, relu = True, bias = False):
         super(DWConv, self).__init__()
@@ -196,7 +196,7 @@ class HgDiffusion(nn.Module):
         combined_hm_preds = []
         for i in range(self.nstack):
             hg = self.hgs[i](x_backup)
-            print("hg:",hg.size())
+            #print("hg:",hg.size())
             feature = self.features[i](hg)
             #print("feature:",feature.size())
             preds = self.outs[i](feature)
