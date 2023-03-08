@@ -14,7 +14,14 @@ def PSAlgorithm(rgb_img, increment):
     value = (img_max + img_min) / 255.0
     L = value/2.0
     mask_1 = L < 0.5
-    1
+    if value.all() == 0 :
+        s1 = 0.5
+    else:
+        s1 = delta/(value)
+    if value.all() == 2:
+        s2 = 0.5
+    else:
+        s2 = delta/(2 - value)
     s = s1 * mask_1 + s2 * (1 - mask_1)
     if increment >= 0:
         temp = increment + s
@@ -43,8 +50,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, default=".", help="path of input videos")
     parser.add_argument("--output", type=str, default="frames", help="path of output clips")
-    parser.add_argument("--increment", type=int, default=0.5, help="increment")
-    parser.add_argument("--Inc", type=int, default=0.5, help="increment")
+    parser.add_argument("--increment", type=float, default=0.5, help="increment")
+    parser.add_argument("--Inc", type=float, default=0.5, help="increment")
     opt = parser.parse_args()
 
     image_path = opt.input
@@ -62,7 +69,7 @@ if __name__ == '__main__':
             img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
             img_new = PSAlgorithm(img, increment)
             img_new = cv2.cvtColor( np.array(img_new * 255, dtype=np.uint8), cv2.COLOR_BGR2RGB)
-            image_path_dir = '{}{}'.format(save_path,now_dir)
+            image_path_dir = '{}/{}'.format(save_path,now_dir)
             if not os.path.exists(image_path_dir):
                 os.mkdir(image_path_dir)
             image_path_saved = '{}/{}'.format(image_path_dir, index_file)

@@ -42,7 +42,7 @@ class Dataload(Dataset):
 
     def set_gan(self):
         cifar_norm_mean = (0.5, 0.5, 0.5)
-        cifar_norm_std =  (0.5, 0.5, 0.5)
+        cifar_norm_std = (0.5, 0.5, 0.5)
         method_list = [
             transforms.ToPILImage(),
             transforms.Resize(self.image_shape),

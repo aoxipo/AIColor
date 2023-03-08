@@ -11,7 +11,7 @@ class DWConv(nn.Module):
         self.inp_dim = inp_dim
         if padding is None:
             padding = (kernel_size-1)//2
-        self.depthwise = nn.Conv2d(inp_dim, inp_dim, kernel_size, stride, padding = padding, groups=inp_dim,bias=inp_dim)
+        self.depthwise = nn.Conv2d(inp_dim, inp_dim, kernel_size, stride, padding = padding, groups=inp_dim, bias=inp_dim)
         self.pointwise = nn.Conv2d(inp_dim, out_dim, kernel_size=1, groups=1)
         self.relu = None
         self.bn = None
@@ -53,14 +53,58 @@ class Conv(nn.Module):
             x = self.relu(x)
         return x
 
-class ResBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, Conv_method = Conv):
+class DConv(nn.Module):
+    def __init__(self, inp_dim, out_dim, kernel_size=3, stride = 1, bn = False, relu = True, padding = None, bias = True):
+        super(DConv, self).__init__()
+        self.inp_dim = inp_dim
+        if padding is None:
+            padding = (kernel_size-1)//2
+        self.conv = nn.Conv2d(inp_dim, out_dim, kernel_size, stride, padding=padding,  dilation = 2, bias = bias)
+        self.relu = None
+        self.bn = None
+        if relu:
+            self.relu = nn.ReLU()
+        if bn:
+            self.bn = nn.BatchNorm2d(out_dim)
+
+    def forward(self, x):
+        assert x.size()[1] == self.inp_dim, "{} {}".format(x.size()[1], self.inp_dim)
+        x = self.conv(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        if self.relu is not None:
+            x = self.relu(x)
+        return x
+
+class CrossResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, padding = 1, Conv_method = Conv):
         super().__init__()
         self.layer = nn.Sequential(
-            Conv_method(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
+            Conv_method(in_channels, out_channels, kernel_size=3, stride=1, padding=padding, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            Conv_method(out_channels, out_channels,kernel_size=3, stride=1, padding=1, bias=False),
+            Conv_method(out_channels, out_channels,kernel_size=3, stride=1, padding=padding, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+
+        self.identity_map = Conv_method(in_channels, out_channels,kernel_size=1, stride=1)
+        self.relu = nn.ReLU(inplace=True)
+    def forward(self, inputs):
+        x = inputs.clone().detach()
+        out = self.layer(x)
+        residual  = self.identity_map(inputs)
+        skip = out * residual
+        return self.relu(skip)
+
+class ResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, padding = 1, Conv_method = Conv):
+        super().__init__()
+        self.layer = nn.Sequential(
+            Conv_method(in_channels, out_channels, kernel_size=3, stride=1, padding=padding, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            Conv_method(out_channels, out_channels,kernel_size=3, stride=1, padding=padding, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
@@ -160,7 +204,7 @@ class Hourglass(nn.Module):
         return up1 + up2
 
 class HgDiffusion(nn.Module):
-    def __init__(self, nstack, input_channel, output_channel, conv_method = 'Conv', bn=False, increase=0, dropout_rate = 0.2):
+    def __init__(self, nstack, input_channel, output_channel, conv_method = 'Conv', bn=False, increase=0, dropout_rate = 0.2, middle_channel = [64,128,256,512]):
         super().__init__()
         self.nstack = nstack
         self.input_channel = input_channel
@@ -169,22 +213,29 @@ class HgDiffusion(nn.Module):
         self.conv_type_dict = {
             "DWConv":DWConv,
             "Conv":Conv,
+            "DConv":DConv,
         }
+        if conv_method == 'DConv':
+            pad_fix = 2
+        else:
+            pad_fix = 1
         self.conv = self.conv_type_dict[self.Conv_method]
         self.hgs = nn.ModuleList( [
             nn.Sequential(
-                Generator(input_channel, output_channel),
+                Generator(input_channel, output_channel, middle_channel = middle_channel),
             ) for i in range(nstack)] 
         )
         self.features = nn.ModuleList( [
             nn.Sequential(
-            ResBlock(input_channel, output_channel, self.conv),
+            ResBlock(input_channel, output_channel, padding=pad_fix, Conv_method = self.conv),
             self.conv(input_channel, output_channel, 1, bn=True, relu=True)
         ) for i in range(nstack)] )
         self.outs = nn.ModuleList( [self.conv(input_channel, output_channel, 1, relu=False, bn=False) for i in range(nstack)] )
-        self.merge_features = nn.ModuleList( [self.conv(input_channel, input_channel) for i in range(nstack-1)] )
-        self.merge_preds = nn.ModuleList( [self.conv(output_channel, output_channel) for i in range(nstack-1)] )
-        
+        self.pool = nn.AvgPool2d( 3, 1, padding = 1) 
+        self.merge_features = nn.ModuleList( [self.conv(input_channel, input_channel, padding = pad_fix) for i in range(nstack-1)] )
+        self.merge_preds = nn.ModuleList( [self.conv(output_channel, output_channel, padding = pad_fix) for i in range(nstack-1)] )
+        self.final = nn.Conv2d(nstack * 3,3,1,1)
+        self.relu = nn.ReLU()
     def forward(self, inputs):
         P,C,W,H = inputs.size()
         if( C == 1 or C == 3):
@@ -196,16 +247,20 @@ class HgDiffusion(nn.Module):
         combined_hm_preds = []
         for i in range(self.nstack):
             hg = self.hgs[i](x_backup)
-            #print("hg:",hg.size())
+            #print("hg:",hg.size()) 
             feature = self.features[i](hg)
             #print("feature:",feature.size())
             preds = self.outs[i](feature)
+            keys = self.pool(preds) 
             #print("preds:", preds.size())
-            combined_hm_preds.append(preds)
+            combined_hm_preds.append(self.relu((preds * hg + feature * hg ) * keys))
             if i < self.nstack - 1:
                 x_backup = x_backup + self.merge_preds[i](preds) + self.merge_features[i](feature)
+        
 
-        return combined_hm_preds
+        feature = torch.cat(combined_hm_preds,1)
+        preds = self.final(feature)
+        return preds #combined_hm_preds
 
 class Critic(nn.Module):
     def __init__(self, in_channels=3):
