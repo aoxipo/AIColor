@@ -1,4 +1,4 @@
-from model.RESUnetGAN import *
+from model.DQ.dq import *
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
@@ -6,7 +6,9 @@ from dataloader import Dataload
 from model.util import *
 import os
 from torch.utils.data import DataLoader
+
 device = 'cuda:1'
+
 class DFGAN(pl.LightningModule):
 
     def __init__(self, in_channels, out_channels, learning_rate=0.0002, lambda_recon=100, display_step=10, lambda_gp=10, lambda_r1=10, middle_channel =  [64,128,256,512]):
@@ -14,7 +16,22 @@ class DFGAN(pl.LightningModule):
         self.save_hyperparameters()
         self.display_step = display_step
         self.nstack = 2
-        self.generator = HgDiffusion(self.nstack, in_channels, out_channels, 'Conv', middle_channel = middle_channel)
+        self.generator = DQAE(
+            in_channel = in_channels,
+            channel = 256,
+            n_res_block = 3,
+            n_res_channel = 256,
+            n_coder_blocks = 2,
+            embed_dim = 64,
+            n_codebooks = 5,
+            stride = 2,
+            decay = 0.99,
+            loss_name = "mse",
+            vq_type = "dq",
+            beta = 0.25,
+            n_hier = middle_channel,
+            n_logistic_mix = 10,
+        )
         self.critic = Critic(out_channels)
         self.generator.apply(self._weights_init)
         self.critic.apply(self._weights_init)
@@ -137,7 +154,7 @@ if __name__ == '__main__':
     )
 
     cwgan = DFGAN(in_channels = 3, out_channels = 3 ,learning_rate=2e-4, lambda_recon=100, display_step=5, middle_channel= [32,64,128,256])
-    cwgan.save_path = "./save/dfgan_combin_middle/"
+    cwgan.save_path = "./save/dqgan/"
     if not os.path.exists(cwgan.save_path):
         os.mkdir(cwgan.save_path)
     trainer = pl.Trainer(max_epochs=50, gpus = [1])

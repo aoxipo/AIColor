@@ -123,7 +123,9 @@ class DownSampleConv(nn.Module):
         super().__init__()
         self.layer = nn.Sequential(
             nn.MaxPool2d(2),
-            ResBlock(in_channels, out_channels)
+            ResBlock(in_channels, out_channels),
+            ResBlock(out_channels, out_channels),
+            ResBlock(out_channels, out_channels),
         )
 
     def forward(self, inputs):
@@ -134,7 +136,11 @@ class UpSampleConv(nn.Module):
         super().__init__()
         
         self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-        self.res_block = ResBlock(in_channels + out_channels, out_channels)
+        self.res_block = nn.Sequential(
+            ResBlock(in_channels + out_channels, out_channels),
+            ResBlock(out_channels, out_channels),
+            ResBlock(out_channels, out_channels),
+        )
         
     def forward(self, inputs, skip):
         x = self.upsample(inputs)
@@ -234,7 +240,7 @@ class HgDiffusion(nn.Module):
         self.pool = nn.AvgPool2d( 3, 1, padding = 1) 
         self.merge_features = nn.ModuleList( [self.conv(input_channel, input_channel, padding = pad_fix) for i in range(nstack-1)] )
         self.merge_preds = nn.ModuleList( [self.conv(output_channel, output_channel, padding = pad_fix) for i in range(nstack-1)] )
-        self.final = nn.Conv2d(nstack * 3,3,1,1)
+        #self.final = nn.Conv2d(nstack * 3,3,1,1)
         self.relu = nn.ReLU()
     def forward(self, inputs):
         P,C,W,H = inputs.size()
@@ -258,9 +264,9 @@ class HgDiffusion(nn.Module):
                 x_backup = x_backup + self.merge_preds[i](preds) + self.merge_features[i](feature)
         
 
-        feature = torch.cat(combined_hm_preds,1)
-        preds = self.final(feature)
-        return preds #combined_hm_preds
+        # feature = torch.cat(combined_hm_preds,1)
+        # preds = self.final(feature)
+        return combined_hm_preds
 
 class Critic(nn.Module):
     def __init__(self, in_channels=3):
@@ -286,6 +292,35 @@ class Critic(nn.Module):
     def forward(self, img_input):
         output = self.model(img_input)
         return output
+
+class VCAttn(nn.Module):
+    """
+    参考图案 结构 
+    """
+    def __init__(self, in_channels, out_channels) -> None:
+        super().__init__()
+        self.conv_s = nn.Conv2d(in_channels, 1, 1,1) #conv_source
+        self.conv_r = nn.Conv2d(in_channels, 1, 1,1) # conv_reference
+        self.conv_rs = nn.Conv2d(1, out_channels, 2,2)
+        self.conv_rs_1x1 = nn.Conv2d(1, 1, 2,2)
+        self.conv_s_a = nn.Conv2d(in_channels + out_channels, out_channels, 3,1,1)
+        self.conv_r_a = nn.Conv2d(in_channels + out_channels, out_channels, 3,1,1)
+        self.RELU = nn.ReLU()
+        self.softmax = nn.Softmax(dim = 1)
+    def forward(self, x, y):
+        x_idn = x.clone().detach()
+        x_q = self.conv_s(x)
+        y_k =  self.conv_rs_1x1(self.conv_r(y))
+        
+        CMat = self.softmax(x_q * y_k)
+        #print(CMat.shape, y_k.shape)
+        y_s = y_k * CMat
+        #print(x_idn.shape, y_s.shape)
+        attention_map = torch.cat([x_idn, y_s], dim = 1)
+        out_put = x_idn + self.RELU(self.conv_s_a(attention_map) * x_idn + self.conv_r_a(attention_map) * y_s)
+        out_put = self.RELU(out_put)
+        return out_put
+
 
 class CWGAN(nn.Module):
 
