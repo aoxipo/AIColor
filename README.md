@@ -36,20 +36,20 @@ we test different model to generate image after colored
 
 ###### DF-gan tiny result:
 
-![10](https://github.com/aoxipo/AIColor/blob/main/assert/save/dfgan_tiny/10.png)
+![10](./assert/save/dfgan_tiny/10.png)
 
 ###### DF-gan middle result:
 
-![30](https://github.com/aoxipo/AIColor/blob/main/assert/save/dgan_64_128/30.png)
+![30](./assert/save/dgan_64_128/30.png)
 
 ###### DF-Unet-Gan result
 
-![65](https://github.com/aoxipo/AIColor/blob/main/assert/save/PHDAE/65.png)
+![65](./assert/save/PHDAE/65.png)
 
 ###### DF-HourGlass-Gan result
 
-![40](https://github.com/aoxipo/AIColor/blob/main/assert/save/dqgan_origin/40.png)
+![40](./assert/save/dqgan_origin/40.png)
 
-![30](https://github.com/aoxipo/AIColor/blob/main/assert/save/dqgan_origin/30.png)
+![30](./assert/save/dqgan_origin/30.png)
 
 ###### 
